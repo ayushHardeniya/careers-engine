@@ -1,4 +1,4 @@
-from careers_engine.filters import IndiaFilter, JobFilter
+from careers_engine.filters import EligibilityFilter, JobFilter
 from careers_engine.models import Job
 
 
@@ -18,10 +18,10 @@ def test_filter_match() -> None:
     assert DummyFilter().match(job)
 
 
-# IndiaFilter() tests
+# EligibilityFilter() tests
 
 
-def test_india_filter_accepts_india() -> None:
+def test_eligibility_filter_accepts_india() -> None:
     job = Job(
         company="Google",
         role="SWE Intern",
@@ -29,10 +29,54 @@ def test_india_filter_accepts_india() -> None:
         apply_url="https://google.com",
     )
 
-    assert IndiaFilter().match(job)
+    assert EligibilityFilter().match(job)
 
 
-def test_india_filter_accepts_remote() -> None:
+def test_eligibility_filter_rejects_remote_in_usa() -> None:
+    job = Job(
+        company="Example",
+        role="Software Engineer Intern",
+        location="Remote in USA",
+        apply_url="https://example.com",
+    )
+
+    assert not EligibilityFilter().match(job)
+
+
+def test_eligibility_filter_rejects_remote_in_canada() -> None:
+    job = Job(
+        company="Example",
+        role="Software Engineer Intern",
+        location="Remote in Canada",
+        apply_url="https://example.com",
+    )
+
+    assert not EligibilityFilter().match(job)
+
+
+def test_eligibility_filter_rejects_indianapolis() -> None:
+    job = Job(
+        company="Example",
+        role="Software Engineer Intern",
+        location="Indianapolis, IN",
+        apply_url="https://example.com",
+    )
+
+    assert not EligibilityFilter().match(job)
+
+
+def test_eligibility_filter_rejects_indiana() -> None:
+    job = Job(
+        company="Example",
+        role="Software Engineer Intern",
+        location="Indiana",
+        apply_url="https://example.com",
+    )
+
+    assert not EligibilityFilter().match(job)
+
+
+def test_eligibility_filter_rejects_unspecified_remote() -> None:
     job = Job(
         company="GitLab",
         role="Backend Engineer",
@@ -40,10 +84,10 @@ def test_india_filter_accepts_remote() -> None:
         apply_url="https://gitlab.com",
     )
 
-    assert IndiaFilter().match(job)
+    assert not EligibilityFilter().match(job)
 
 
-def test_india_filter_rejects_foreign() -> None:
+def test_eligibility_filter_rejects_foreign() -> None:
     job = Job(
         company="Google",
         role="SWE Intern",
@@ -51,4 +95,4 @@ def test_india_filter_rejects_foreign() -> None:
         apply_url="https://google.com",
     )
 
-    assert not IndiaFilter().match(job)
+    assert not EligibilityFilter().match(job)
