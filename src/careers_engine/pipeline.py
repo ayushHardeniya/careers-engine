@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from careers_engine.filters import IndiaFilter
+from careers_engine.filters import EligibilityFilter
 from careers_engine.models import Job
 from careers_engine.sources import get_sources
 
@@ -25,7 +25,7 @@ class Pipeline:
         """
 
         filters = [
-            IndiaFilter(),
+            EligibilityFilter(),
         ]
 
         for job_filter in filters:
