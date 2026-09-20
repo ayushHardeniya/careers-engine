@@ -1,8 +1,249 @@
 ---
-title: "Overview"
-description: "Architecture overview."
+title: "Architecture Overview"
+description: "Understand the architecture and major components of ZenYukti Careers Engine."
 ---
 
-Documentation for this section is currently under development.
+ZenYukti Careers Engine is a modular job discovery and distribution system.
 
-This page will explain the high-level flow of careers-engine, from source collection through enrichment, storage, and publishing.
+It collects career opportunities from external sources, converts them into a common representation, applies eligibility rules, stores the resulting dataset, and publishes new opportunities through configured distribution channels.
+
+The system is designed so that individual sources, parsers, filters, storage, and publishers remain independently replaceable.
+
+## System Architecture
+
+At a high level, the system follows this flow:
+
+<img
+  src="/images/architecture-overview.png"
+  alt="ZenYukti Careers Engine architecture overview"
+/>
+
+The current implementation uses SpeedyApply and Simplify as upstream sources and Discord as its publishing channel.
+
+## Major Components
+
+### Upstream Sources
+
+Sources provide the raw career opportunity data consumed by the engine.
+
+The current sources are:
+
+- **SpeedyApply** — provides internship and new-grad opportunities through Markdown files.
+- **Simplify** — provides internship listings through a JSON dataset.
+
+Each source is implemented behind the `BaseSource` interface so that the ingestion pipeline does not need to know the details of an individual upstream.
+
+### Source Adapters
+
+A source adapter is responsible for communicating with an upstream source and converting its raw data into records that the engine can process.
+
+Source-specific concerns such as URLs, upstream files, and source-specific fields remain inside the corresponding source implementation.
+
+This keeps the core pipeline independent of individual upstream repositories.
+
+### Parsers
+
+Different sources expose data in different formats.
+
+The engine therefore separates fetching source data from parsing that data.
+
+The current parser implementations include:
+
+- `MarkdownTableParser`
+- `JsonParser`
+
+For example, SpeedyApply's Markdown tables are processed by `MarkdownTableParser`, while Simplify's JSON dataset is processed by `JsonParser`.
+
+The parser produces structured records that can then be converted into the canonical `Job` model.
+
+### Job Model
+
+The `Job` model provides the common representation used by the rest of the system.
+
+Regardless of which upstream produced an opportunity, the pipeline works with the same model.
+
+A job contains fields such as:
+
+- company
+- role
+- location
+- application URL
+- employment type
+- eligibility
+- stipend
+- deadline
+- description
+- priority
+- discovery timestamp
+
+The model also provides a deterministic identifier used when synchronizing jobs with persistent storage.
+
+### Eligibility and Filtering
+
+After source data has been converted into jobs, the pipeline applies eligibility filters.
+
+The current eligibility filter keeps opportunities whose location explicitly indicates India.
+
+The filtering layer is separate from source implementations so that eligibility rules can evolve without modifying individual source adapters.
+
+### Storage
+
+The engine stores its persistent dataset separately from the application source code.
+
+The current deployment uses the `careers-data` repository as the data store.
+
+The primary datasets include:
+
+- `jobs.json` — collected career opportunities.
+- `history.json` — publishing history used to determine which jobs have already been published.
+
+Keeping application code and persistent data separate allows the automation workflows to update job data without modifying the source repository.
+
+### Publishing
+
+Publishing is handled separately from ingestion.
+
+The publishing pipeline reads the stored jobs, determines which opportunities have not yet been published, formats them for the configured publisher, and sends them to the distribution channel.
+
+The current publisher is Discord.
+
+Publishing history is persisted so that subsequent executions do not repeatedly publish the same opportunities.
+
+### Automation
+
+The system is executed through GitHub Actions.
+
+The current automation consists of two independent workflows:
+
+1. **Ingestion workflow**
+   - collects opportunities from configured sources
+   - applies the ingestion pipeline
+   - updates `careers-data/jobs.json`
+
+2. **Publishing workflow**
+   - reads the stored jobs
+   - checks publishing history
+   - publishes new opportunities to Discord
+   - updates `careers-data/history.json`
+
+The workflows run on a schedule and can also be triggered manually.
+
+## Design Principles
+
+The architecture follows several principles.
+
+### Modular Sources
+
+Adding a new upstream should require implementing a source adapter and, when necessary, a parser rather than modifying the entire ingestion pipeline.
+
+### Separation of Concerns
+
+Fetching, parsing, modeling, filtering, persistence, and publishing are separate responsibilities.
+
+### Idempotent Automation
+
+Repeated ingestion and publishing runs should not continuously create duplicate records or repost already-published opportunities.
+
+### Data Separation
+
+Application code and persistent career data are maintained separately.
+
+### Testable Components
+
+Core components are implemented independently so that source adapters, parsers, filters, and other behavior can be tested without requiring the complete production workflow.
+
+## Architecture Boundaries
+
+The engine is divided into two primary operational paths.
+
+### Ingestion
+
+The ingestion path is responsible for discovering and storing opportunities.
+
+```text
+Source
+  ↓
+Fetch
+  ↓
+Parse
+  ↓
+Job Model
+  ↓
+Eligibility
+  ↓
+Storage
+```
+
+Its responsibility ends when the current job dataset has been synchronized with persistent storage.
+
+### Publishing
+
+The publishing path is responsible for distributing opportunities that have not previously been published.
+
+```text
+Stored Jobs
+  ↓
+Publishing History
+  ↓
+Unpublished Jobs
+  ↓
+Formatting
+  ↓
+Publisher
+  ↓
+Distribution Channel
+```
+
+Keeping these paths separate means that discovering a job and publishing a job are independent operations.
+
+## Repository Boundaries
+
+The application code and persistent data are maintained in separate repositories.
+
+### `careers-engine`
+
+Contains the application itself, including:
+
+- source adapters
+- parsers
+- filters
+- models
+- storage logic
+- publishers
+- tests
+- GitHub Actions workflows
+- documentation
+
+### `careers-data`
+
+Contains the persistent datasets produced and consumed by the engine.
+
+The primary files are:
+
+- `jobs.json`
+- `history.json`
+
+This separation allows the engine to update persistent state without mixing generated data with application source code.
+
+## Extending the Architecture
+
+The architecture is designed around interfaces and independent components.
+
+A new source can be introduced by implementing the source abstraction and connecting the appropriate parser to it.
+
+A source that exposes a format already supported by the engine can reuse an existing parser. A source using a different format can introduce a new parser without changing the rest of the ingestion pipeline.
+
+Similarly, additional filters or publishers can be introduced without requiring the existing source implementations to know about them.
+
+This keeps the core pipeline stable as the number of sources and distribution channels grows.
+
+## Where to Go Next
+
+The remaining architecture documentation describes each part of the system in greater detail:
+
+- [Ingestion Pipeline](/architecture/ingestion-pipeline) — how opportunities move from upstream sources into persistent storage.
+- [Publishing Pipeline](/architecture/publishing-pipeline) — how stored opportunities are selected and published.
+- [Storage](/architecture/storage) — how persistent job and publishing state is maintained.
+- [Company Branding](/architecture/company-branding) — how company branding and logos are handled.
+- [Employment Inference](/architecture/employment-inference) — how employment types are inferred from opportunity data.
+- [Repository Layout](/architecture/repository-layout) — how the source repository is organized.
